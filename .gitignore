@@ -1,0 +1,19 @@
+# Dependencies and build output
+node_modules
+dist
+
+# Local environment (never commit Firebase config overrides or App Check debug tokens)
+.env
+.env.local
+.env.*.local
+
+# Firebase CLI
+.firebase
+firebase-debug.log
+
+# Agent tooling installed locally (restore with: npx skills experimental_install)
+.claude
+
+# Misc
+*.log
+.DS_Store

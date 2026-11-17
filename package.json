@@ -1,0 +1,49 @@
+{
+  "name": "blindfold",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Let cloud AI work on your sensitive documents without ever seeing the real names and numbers. Hybrid on-device + cloud inference with Firebase AI Logic.",
+  "license": "MIT",
+  "homepage": "https://github.com/fandyrahmats/blindfold#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fandyrahmats/blindfold.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fandyrahmats/blindfold/issues"
+  },
+  "keywords": [
+    "firebase",
+    "firebase-ai-logic",
+    "hybrid-inference",
+    "gemini-nano",
+    "on-device-ai",
+    "privacy",
+    "pii-redaction"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "npm run build && npx -y firebase-tools@latest deploy"
+  },
+  "dependencies": {
+    "firebase": "^13.4.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

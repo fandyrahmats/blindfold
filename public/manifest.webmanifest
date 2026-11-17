@@ -1,0 +1,10 @@
+{
+  "name": "Blindfold",
+  "short_name": "Blindfold",
+  "description": "Ask AI about documents you can't show AI.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#f4f1ea",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
