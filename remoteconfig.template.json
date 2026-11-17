@@ -1,0 +1,34 @@
+{
+  "parameters": {
+    "cloud_model": {
+      "defaultValue": { "value": "gemini-3.8-flash" },
+      "description": "Cloud model for heavy tasks (PREFER_IN_CLOUD / ONLY_IN_CLOUD).",
+      "valueType": "STRING"
+    },
+    "fallback_cloud_model": {
+      "defaultValue": { "value": "gemini-3.5-flash-lite" },
+      "description": "Cloud model the SDK falls back to for light tasks (PREFER_ON_DEVICE) and consented cloud-assisted detection.",
+      "valueType": "STRING"
+    },
+    "on_device_token_budget": {
+      "defaultValue": { "value": "4000" },
+      "description": "Largest prompt, in estimated tokens, routed to the on-device model. Gemini Nano's hard limit is 9216 including output.",
+      "valueType": "NUMBER"
+    },
+    "detect_chunk_chars": {
+      "defaultValue": { "value": "1600" },
+      "description": "Chunk size, in characters, for entity detection.",
+      "valueType": "NUMBER"
+    },
+    "allow_cloud_detection": {
+      "defaultValue": { "value": "true" },
+      "description": "Whether users on devices without a local model may opt in to cloud-assisted name detection.",
+      "valueType": "BOOLEAN"
+    },
+    "max_document_chars": {
+      "defaultValue": { "value": "60000" },
+      "description": "Maximum document length accepted by the app.",
+      "valueType": "NUMBER"
+    }
+  }
+}
