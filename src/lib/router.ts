@@ -6,6 +6,14 @@
 
 export type DeviceStatus = 'unknown' | 'available' | 'downloadable' | 'downloading' | 'unavailable';
 
+/** Why the local model cannot be used right now, in words that match the header pill. */
+export const noLocalModel = (device: DeviceStatus): string =>
+  device === 'downloading'
+    ? 'The on-device model is still downloading'
+    : device === 'downloadable'
+      ? 'The on-device model is not enabled yet (use "Enable on-device AI" above)'
+      : 'This device has no on-device model';
+
 /** String values match firebase/ai's InferenceMode constants. */
 export type RouteMode = 'only_on_device' | 'prefer_on_device' | 'prefer_in_cloud' | 'only_in_cloud' | 'blocked';
 
@@ -53,7 +61,7 @@ export function decideRoute(input: RouteInput): Route {
 
   if (input.weight === 'light' && fits) {
     return deviceReady
-      ? { mode: 'prefer_on_device', expected: 'device', reason: 'Light task that fits the on-device budget: free, private and instant.' }
+      ? { mode: 'prefer_on_device', expected: 'device', reason: 'Light task that fits the on-device budget: it stays on this device, free and private.' }
       : { mode: 'prefer_on_device', expected: 'cloud', reason: 'No on-device model here, so the SDK falls back to the cloud with the blindfolded text.' };
   }
 

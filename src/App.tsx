@@ -19,12 +19,13 @@ import {
   findLeaks,
   maskSegments,
   maskText,
+  rehydrate,
   segment,
   setEntityEnabled,
   setTypeEnabled,
   shieldStats,
 } from './lib/pseudonymize';
-import { decideRoute } from './lib/router';
+import { decideRoute, noLocalModel } from './lib/router';
 import type { DeviceStatus } from './lib/router';
 import {
   deleteThread,
@@ -93,6 +94,14 @@ export default function App() {
     return watchThreads(user.uid, setThreads);
   }, [user]);
 
+  // A download that this page is not driving (started before a reload, or in another
+  // tab) reports no progress here, so ask Chrome again until it settles.
+  useEffect(() => {
+    if (device !== 'downloading' || progress !== null) return;
+    const timer = window.setInterval(() => void probeDevice().then(setDevice), 5000);
+    return () => window.clearInterval(timer);
+  }, [device, progress]);
+
   const enableDevice = useCallback(async () => {
     setProgress(0);
     try {
@@ -107,7 +116,10 @@ export default function App() {
 
   /* ---------- document + shield ---------- */
 
-  const segments = useMemo(() => segment(text, vault), [text, vault]);
+  const segments = useMemo(
+    () => (foreign ? rehydrate(text, emptyVault(), true) : segment(text, vault)),
+    [foreign, text, vault],
+  );
   const stats = useMemo(() => shieldStats(segments), [segments]);
   const masked = useMemo(() => maskSegments(segments), [segments]);
 
@@ -168,7 +180,7 @@ export default function App() {
     async (file: File) => {
       if (device !== 'available') {
         const ok = window.confirm(
-          'This device has no on-device model, so the image itself would be sent to the cloud model to read its text. Nothing in it is blindfolded yet. Continue?',
+          `${noLocalModel(device)}, so the image itself would be sent to the cloud model to read its text. Nothing in it is blindfolded yet. Continue?`,
         );
         if (!ok) return;
       }
@@ -220,15 +232,12 @@ export default function App() {
     window.scrollTo({ top: 0 });
   }, []);
 
-  // The original text and the vault are persisted in this browser only.
-  useEffect(() => {
-    if (phase === 'workspace' && threadId && !foreign) saveLocal(threadId, { text, vault });
-  }, [phase, threadId, foreign, text, vault]);
-
   // Firestore receives the blindfolded thread, never the vault.
   const doneTurns = useMemo(() => turns.filter((t) => t.status === 'done' && t.source), [turns]);
   useEffect(() => {
     if (!user || !threadId || foreign || doneTurns.length === 0) return;
+    // The original text and the vault stay in this browser, and only for saved threads.
+    saveLocal(threadId, { text, vault });
     const title = masked.split('\n').find((line) => line.trim())?.trim() ?? 'Untitled';
     saveThread(user.uid, {
       id: threadId,
@@ -245,7 +254,7 @@ export default function App() {
         at: t.at,
       })),
     }).catch(() => {});
-  }, [user, threadId, foreign, doneTurns, masked, stats.protectedValues]);
+  }, [user, threadId, foreign, doneTurns, masked, stats.protectedValues, text, vault]);
 
   /* ---------- asking ---------- */
 
@@ -350,8 +359,8 @@ export default function App() {
         onWipe={() => {
           if (!window.confirm('Delete every original document and vault stored in this browser? Blindfolded threads in your account are kept.')) return;
           const removed = wipeLocal();
-          setNotice(`Local vault wiped: ${removed} ${removed === 1 ? 'document' : 'documents'} removed from this browser.`);
           goHome();
+          setNotice(`Local vault wiped: ${removed} ${removed === 1 ? 'document' : 'documents'} removed from this browser.`);
         }}
       />
 

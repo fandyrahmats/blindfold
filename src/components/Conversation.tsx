@@ -72,9 +72,11 @@ function TurnCard({ turn, vault }: { turn: Turn; vault: VaultState }) {
         <h3>{turn.label}</h3>
         <div className="turn-meta">
           {sourceTag}
-          <span className="mode" title={turn.reason}>
-            {MODE_LABEL[turn.mode]}
-          </span>
+          {turn.mode !== 'blocked' && (
+            <span className="mode" title={turn.reason}>
+              {MODE_LABEL[turn.mode]}
+            </span>
+          )}
           {turn.ms !== undefined && <span className="mode">{(turn.ms / 1000).toFixed(1)}s</span>}
         </div>
       </header>

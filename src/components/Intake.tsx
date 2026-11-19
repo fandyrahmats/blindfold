@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { noLocalModel } from '../lib/router';
 import type { DeviceStatus } from '../lib/router';
 import { SAMPLES } from '../lib/samples';
 import type { SavedThread } from '../lib/store';
@@ -66,7 +67,7 @@ export function Intake(props: Props) {
                 ? 'Connect Firebase to read screenshots'
                 : onDevice
                   ? 'The image is read by the on-device model and never uploaded'
-                  : 'No on-device model here: the image would be sent to the cloud model. You will be asked first.'
+                  : `${noLocalModel(props.device)}: the image would be sent to the cloud model. You will be asked first.`
             }
           >
             {props.imageBusy ? 'Reading image…' : onDevice ? 'Read a screenshot on-device' : 'Read a screenshot'}
@@ -90,7 +91,7 @@ export function Intake(props: Props) {
           <label className="consent">
             <input type="checkbox" checked={props.allowCloud} onChange={(e) => props.onAllowCloud(e.target.checked)} />
             <span>
-              This device has no on-device model, so names are found by patterns only. Tick to also let the cloud model
+              {noLocalModel(props.device)}, so names are found by patterns only. Tick to also let the cloud model
               look for names. Emails, phones, amounts and account numbers are masked first, but names will be visible to
               the cloud during that one detection step.
             </span>
