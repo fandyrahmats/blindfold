@@ -67,7 +67,7 @@ export function Header(props: Props) {
           </span>
         )}
         {configured && !appCheckReady && (
-          <span className="pill pill-warn" title="Set VITE_RECAPTCHA_ENTERPRISE_SITE_KEY so App Check can attest this app.">
+          <span className="pill pill-warn" title="Set VITE_RECAPTCHA_ENTERPRISE_SITE_KEY or VITE_RECAPTCHA_V3_SITE_KEY so App Check can attest this app.">
             App Check not set up
           </span>
         )}

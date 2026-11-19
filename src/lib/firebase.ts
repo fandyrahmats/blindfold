@@ -5,12 +5,12 @@
  */
 import { initializeApp } from 'firebase/app';
 import type { FirebaseApp } from 'firebase/app';
-import { CustomProvider, initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
+import { CustomProvider, initializeAppCheck, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider } from 'firebase/app-check';
 import { getAI, GoogleAIBackend } from 'firebase/ai';
 import type { AI } from 'firebase/ai';
 import { getAuth } from 'firebase/auth';
 import type { Auth } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { fetchAndActivate, getRemoteConfig, getValue } from 'firebase/remote-config';
 import type { RemoteConfig } from 'firebase/remote-config';
@@ -30,7 +30,7 @@ export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseCon
 
 /** Runtime-tunable policy. Defaults ship in the bundle; Remote Config overrides them. */
 export interface AppConfig {
-  /** Cloud model for heavy tasks (PREFER_IN_CLOUD / ONLY_IN_CLOUD). */
+  /** Cloud model for heavy tasks (PREFER_IN_CLOUD / ONLY_IN_CLOUD). Raise it in Remote Config when the project has billing. */
   cloud_model: string;
   /** Cloud model the SDK falls back to for light tasks (PREFER_ON_DEVICE). */
   fallback_cloud_model: string;
@@ -44,7 +44,7 @@ export interface AppConfig {
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
-  cloud_model: 'gemini-3.8-flash',
+  cloud_model: 'gemini-3.5-flash-lite',
   fallback_cloud_model: 'gemini-3.5-flash-lite',
   on_device_token_budget: 4000,
   detect_chunk_chars: 1600,
@@ -65,19 +65,22 @@ export interface Services {
 let services: Services | null | undefined;
 
 function setUpAppCheck(app: FirebaseApp): boolean {
-  const siteKey = env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY as string | undefined;
+  const enterpriseKey = env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY as string | undefined;
+  const v3Key = env.VITE_RECAPTCHA_V3_SITE_KEY as string | undefined;
   if (env.DEV) {
     // Local development: use the debug provider. The token comes from a
     // gitignored .env.local, or is generated and printed to the console.
     (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN: string | boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN =
       (env.VITE_APPCHECK_DEBUG_TOKEN as string | undefined) || true;
-  } else if (!siteKey) {
+  } else if (!enterpriseKey && !v3Key) {
     return false;
   }
   initializeAppCheck(app, {
-    provider: siteKey
-      ? new ReCaptchaEnterpriseProvider(siteKey)
-      : new CustomProvider({ getToken: () => Promise.reject(new Error('No App Check provider configured')) }),
+    provider: enterpriseKey
+      ? new ReCaptchaEnterpriseProvider(enterpriseKey)
+      : v3Key
+        ? new ReCaptchaV3Provider(v3Key)
+        : new CustomProvider({ getToken: () => Promise.reject(new Error('No App Check provider configured')) }),
     isTokenAutoRefreshEnabled: true,
   });
   return true;
@@ -92,9 +95,15 @@ export function getServices(): Services | null {
   // Limited-use tokens give Gemini requests replay protection.
   const ai = getAI(app, { backend: new GoogleAIBackend(), useLimitedUseAppCheckTokens: true });
   const auth = getAuth(app);
-  const db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  });
+  let db: Firestore;
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch {
+    // Already initialized (a dev hot reload re-evaluated this module).
+    db = getFirestore(app);
+  }
   const remoteConfig = getRemoteConfig(app);
   remoteConfig.settings.minimumFetchIntervalMillis = env.DEV ? 60_000 : 3_600_000;
   remoteConfig.defaultConfig = { ...DEFAULT_CONFIG };
