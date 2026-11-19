@@ -119,7 +119,7 @@ export async function detectEntities(opts: DetectOptions): Promise<DetectResult>
         inCloudParams: {
           model: opts.config.fallback_cloud_model,
           systemInstruction: DETECT_SYSTEM,
-          generationConfig: { responseMimeType: 'application/json', responseSchema: entitySchema, temperature: 0 },
+          generationConfig: { responseMimeType: 'application/json', responseSchema: entitySchema },
         },
       };
   const model = getGenerativeModel(requireAI(), params);
@@ -180,7 +180,7 @@ function taskModel(mode: InferenceMode, cloudModel: string): GenerativeModel {
   if (!model) {
     model = getGenerativeModel(requireAI(), {
       mode,
-      inCloudParams: { model: cloudModel, generationConfig: { temperature: 0.3 } },
+      inCloudParams: { model: cloudModel },
       onDeviceParams: { createOptions: { expectedInputs: TEXT_IO, expectedOutputs: TEXT_IO } },
     });
     taskModels.set(key, model);
@@ -191,19 +191,36 @@ function taskModel(mode: InferenceMode, cloudModel: string): GenerativeModel {
 /** Runs one blindfolded request with the routed inference mode and streams the answer. */
 export async function runTask(opts: TaskOptions): Promise<TaskResult> {
   const lightPath = opts.mode === 'prefer_on_device' || opts.mode === 'only_on_device';
-  const cloudModel = lightPath ? opts.config.fallback_cloud_model : opts.config.cloud_model;
-  const model = taskModel(MODE[opts.mode], cloudModel);
+  const preferred = lightPath ? opts.config.fallback_cloud_model : opts.config.cloud_model;
 
-  const result = await model.generateContentStream(opts.prompt);
-  let text = '';
-  for await (const chunk of result.stream) {
-    text += chunk.text();
-    opts.onText(text);
+  const attempt = async (cloudModel: string): Promise<TaskResult> => {
+    const model = taskModel(MODE[opts.mode], cloudModel);
+    const result = await model.generateContentStream(opts.prompt);
+    let text = '';
+    for await (const chunk of result.stream) {
+      text += chunk.text();
+      opts.onText(text);
+    }
+    const response = await result.response;
+    const expected: Source = opts.mode === 'only_on_device' ? 'on_device' : 'in_cloud';
+    return { text: text || response.text(), source: toSource(response.inferenceSource, expected), cloudModel };
+  };
+
+  try {
+    return await attempt(preferred);
+  } catch (err) {
+    // The configured heavy model may be unavailable on this project (no free tier,
+    // retired, or misspelled in Remote Config). Retry once on the lighter model
+    // rather than failing the request.
+    const fallback = opts.config.fallback_cloud_model;
+    if (preferred !== fallback && isModelUnavailable(err)) return attempt(fallback);
+    throw err;
   }
-  const response = await result.response;
-  const finalText = text || response.text();
-  const expected: Source = opts.mode === 'only_on_device' ? 'on_device' : 'in_cloud';
-  return { text: finalText, source: toSource(response.inferenceSource, expected), cloudModel };
+}
+
+function isModelUnavailable(err: unknown): boolean {
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return m.includes('free tier is not available') || m.includes('is not found') || m.includes('not supported for generatecontent');
 }
 
 async function fileToPart(file: File): Promise<Part> {
@@ -229,7 +246,7 @@ export async function transcribeImage(
   const onDevice = device === 'available';
   const model = getGenerativeModel(requireAI(), {
     mode: onDevice ? InferenceMode.ONLY_ON_DEVICE : InferenceMode.ONLY_IN_CLOUD,
-    inCloudParams: { model: config.fallback_cloud_model, generationConfig: { temperature: 0 } },
+    inCloudParams: { model: config.fallback_cloud_model },
     onDeviceParams: { createOptions: { expectedInputs: [...TEXT_IO, { type: 'image' }], expectedOutputs: TEXT_IO } },
   });
   const result = await model.generateContent([TRANSCRIBE_PROMPT, await fileToPart(file)]);
@@ -244,6 +261,13 @@ export function explainError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
   const m = raw.toLowerCase();
   if (m.includes('not configured')) return raw;
+  if (m.includes('free tier is not available')) {
+    return 'Google reports that the Gemini API free tier is not available for this Firebase project, so cloud requests are refused. Link a billing account to the project, or use a project with free-tier access. On-device requests are not affected.';
+  }
+  if (m.includes('operation-not-allowed')) {
+    return 'Google sign-in is not enabled for this Firebase project yet. Enable it under Authentication > Sign-in method.';
+  }
+  if (m.includes('popup-closed') || m.includes('cancelled-popup')) return 'Sign-in was cancelled.';
   if (m.includes('app check') || m.includes('appcheck') || m.includes('app-check')) {
     return 'App Check rejected the request. Register this browser\'s debug token (printed in the console) or set a reCAPTCHA Enterprise site key. See README.';
   }
