@@ -13,7 +13,11 @@ firebase-debug.log
 
 # Agent tooling installed locally (restore with: npx skills experimental_install)
 .claude
+.agents
 
 # Misc
 *.log
 .DS_Store
+
+# Local Firebase project alias (pick yours with: firebase use --add)
+.firebaserc
