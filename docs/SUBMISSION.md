@@ -6,7 +6,7 @@ Everything the #BuildHybridAI submission form asks for. Replace the bracketed pa
 
 - [ ] Platform selected: **Web (Chrome)**
 - [ ] Public GitHub repo with the MIT `LICENSE` detected in the About section
-- [ ] Hosted URL (Firebase Hosting): [https://YOUR-PROJECT.web.app]
+- [ ] Hosted URL (Firebase Hosting): https://blindfold-hybrid-ai.web.app (live once `npm run deploy` has run and a production App Check key is set)
 - [ ] Demo video, 3 minutes or less, public on YouTube, in English: [link]
 - [ ] Text description (below)
 - [ ] App is free to use
@@ -74,7 +74,7 @@ firebase-ai-logic, gemini-nano, gemini, firebase-app-check, firebase-remote-conf
 | 0:25 | Click the freelance contract sample; panes appear | "On the left, my contract, on my device. On the right, the only copy that is allowed to leave. Names, companies, amounts and the IBAN are placeholders." |
 | 0:45 | Point at the status line "Names found by Gemini Nano on this device" | "The names were found by Gemini Nano, running in Chrome through Firebase AI Logic in ONLY_ON_DEVICE mode. The original never left." |
 | 1:00 | Click a highlight to let it through; select text and blindfold it | "I stay in control: let a value through, or blindfold anything by hand." |
-| 1:10 | Click Summarize; answer tagged "Ran on this device" | "A light task runs on-device: free, private, instant. PREFER_ON_DEVICE." |
+| 1:10 | Click Summarize; answer tagged "Ran on this device" | "A light task runs on-device: free and private, nothing leaves the laptop. PREFER_ON_DEVICE." |
 | 1:30 | Click Find risks; answer tagged "Ran in the cloud" | "Heavy reasoning goes to Gemini in the cloud. It reviewed the contract without learning a single name." |
 | 1:50 | Flip "As the model wrote it"; open "Exact payload sent" | "This is what the model actually wrote, and this is exactly what it was sent. The real values were restored locally." |
 | 2:10 | Turn Wi-Fi off; click Summarize; then Find risks is blocked | "Offline, light tasks still work. Heavy ones are blocked with a reason, never sent quietly." |

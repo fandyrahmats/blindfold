@@ -69,7 +69,7 @@ Every answer is labelled from `response.inferenceSource` (`ON_DEVICE` or `IN_CLO
 Other Firebase products:
 
 - **App Check** (required by AI Logic): reCAPTCHA Enterprise in production, debug provider in development, limited-use tokens for replay protection. See [`src/lib/firebase.ts`](src/lib/firebase.ts).
-- **Remote Config**: cloud model names, the on-device token budget, detection chunk size and whether cloud-assisted detection may be offered. The routing policy can be tuned without a deploy. Template: [`remoteconfig.template.json`](remoteconfig.template.json).
+- **Remote Config**: cloud model names (free-tier `gemini-3.5-flash-lite` by default; point `cloud_model` at a larger model when the project has billing), the on-device token budget, detection chunk size and whether cloud-assisted detection may be offered. The routing policy can be tuned without a deploy. Template: [`remoteconfig.template.json`](remoteconfig.template.json).
 - **Authentication**: anonymous by default, optional upgrade to Google so threads follow you across devices.
 - **Cloud Firestore**: stores **only** the blindfolded document and blindfolded answers, with offline persistence. Rules in [`firestore.rules`](firestore.rules) restrict each thread to its owner and validate its shape. Open a thread on another device and you get the placeholders, not the values, because the vault stayed where it was created.
 - **Hosting**: static deploy with an offline shell (service worker), so the on-device path keeps working with no connection.
@@ -90,19 +90,31 @@ Without a Firebase config the app still opens in "pattern shield only" mode, so 
 
 ```bash
 npx -y firebase-tools@latest login
-npx -y firebase-tools@latest use --add          # pick your project
-npx -y firebase-tools@latest init ailogic       # enables the Gemini Developer API for AI Logic
-npx -y firebase-tools@latest deploy --only firestore:rules,remoteconfig
+npx -y firebase-tools@latest use --add                     # pick your project
+npx -y firebase-tools@latest apps:create WEB "Blindfold"   # then: apps:sdkconfig WEB <appId>
+npx -y firebase-tools@latest init ailogic                  # interactive: enables Firebase AI Logic for the web app
+npx -y firebase-tools@latest deploy --only firestore,remoteconfig,auth
 ```
 
-Then, in the Firebase console:
+The deploy creates the Firestore database, releases the rules, publishes the Remote Config template and enables anonymous sign-in (all declared in `firebase.json`). Copy the web app config into `.env.local`.
 
-1. **Project settings > Your apps**: register a Web app and copy its config into `.env.local`.
-2. **Authentication > Sign-in method**: enable Anonymous and Google.
-3. **Firestore Database**: create the database (production mode; the rules above are deployed by the command).
-4. **Security > App Check**: confirm enforcement is on for Firebase AI Logic.
-   - Development: start the app, copy the debug token printed in the browser console, and register it under **Apps > Manage debug tokens**. To keep it stable, put it in `VITE_APPCHECK_DEBUG_TOKEN` in `.env.local` (never commit it).
-   - Production: register the app with reCAPTCHA Enterprise and set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY`.
+Coding agents can do the same through the Firebase MCP server in `.mcp.json`: its `firebase_init` tool enables AI Logic, Auth and Firestore without the interactive prompts.
+
+App Check (required by Firebase AI Logic):
+
+- Make sure the **Firebase App Check API** is enabled for the project (open **Security > App Check** in the console once), and that enforcement is on for Firebase AI Logic.
+- Development: register a debug token and keep it in `.env.local` (never commit it).
+
+  ```bash
+  npx -y firebase-tools@latest appcheck:debugtokens:create --app <appId> --display-name "Local dev"
+  ```
+
+  Put the printed token in `VITE_APPCHECK_DEBUG_TOKEN`.
+- Production: set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` (reCAPTCHA Enterprise) or `VITE_RECAPTCHA_V3_SITE_KEY` (classic reCAPTCHA v3) and register the same key under **Security > App Check > Apps**.
+
+Optional: enable Google under **Authentication > Sign-in method** to sync blindfolded threads across devices.
+
+Note: Google decides per project whether the Gemini API free tier is available. If cloud requests return "free tier is not available for this project", link a billing account to the project. On-device requests are unaffected.
 
 ### On-device model in Chrome
 
@@ -117,7 +129,7 @@ On any other browser or device, Blindfold runs in fallback mode: pattern shield 
 ### Test, build, deploy
 
 ```bash
-npm test          # 26 unit tests: detectors, vault, leak check, routing, rendering
+npm test          # 40 unit tests: detectors, vault, leak check, routing, hybrid orchestration, rendering
 npm run build
 npm run deploy    # build + firebase deploy (hosting, rules, Remote Config)
 ```
@@ -143,6 +155,8 @@ remoteconfig.template.json
 - A blindfolded amount cannot be added up by the cloud model. Let the Amounts category through when you need arithmetic.
 - The context of a document can identify someone even without their name. Blindfold reduces what the cloud can see; it does not make a document anonymous.
 - On devices without a local model, names are protected only by patterns unless the user opts in to cloud-assisted detection.
+- On-device speed depends on the hardware. Measured on a laptop with integrated graphics (Intel Iris Xe, 16 GB RAM, Chrome 158): name detection on a one-page contract about 70 s, light tasks 25 to 70 s, a heavy task under Strict local about 3 minutes. The first request after the model loads is slower.
+- The original text and the vault are kept in the browser's local storage, and only for threads you have saved. "Wipe local vault" removes them; after that, saved threads show placeholders only.
 
 ## Built with
 
