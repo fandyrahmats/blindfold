@@ -131,6 +131,50 @@ describe('vault and masking', () => {
     ]);
     expect(maskText('Linden Analytics LLC and Linden.', v)).toBe('[ORG_2] and [ORG_1].');
   });
+
+  it('merges what the model finds into what the patterns already protect', () => {
+    // Seen with Gemini Nano on the sample contract: sentence punctuation copied into
+    // names, and wider spans around values the pattern shield had already masked.
+    const doc =
+      'Between Meridian Outfitters Inc. and Priya Raman, trading as Harbor & Finch Studio Ltd. ' +
+      'Meridian Outfitters pays to IBAN GB29 NWBK 6016 1331 9268 19. Signed for Harbor & Finch Studio Ltd';
+    const base = addDetections(emptyVault(), detectPatterns(doc));
+    const before = base.entities.length;
+    const merged = addDetections(base, [
+      { text: 'Meridian Outfitters Inc.', type: 'ORG', source: 'on_device' },
+      { text: 'Harbor & Finch Studio Ltd.', type: 'ORG', source: 'on_device' },
+      { text: 'IBAN GB29 NWBK 6016 1331 9268 19', type: 'ID', source: 'on_device' },
+      { text: 'Meridian Outfitters', type: 'ORG', source: 'on_device' },
+      { text: 'Priya Raman', type: 'PERSON', source: 'on_device' },
+    ]);
+    // Only the person is new; nothing got a second placeholder.
+    expect(merged.entities.length).toBe(before + 1);
+    expect(merged.entities.filter((e) => e.type === 'ORG').length).toBe(2);
+    expect(merged.entities.some((e) => e.type === 'ID')).toBe(false);
+    const masked = maskText(doc, merged);
+    expect(masked).toBe(
+      'Between [ORG_1]. and [PERSON_1], trading as [ORG_2]. [ORG_1] pays to IBAN [IBAN_1]. Signed for [ORG_2]',
+    );
+  });
+
+  it('never drops the rest of a name when the model finds a fuller form', () => {
+    // Regression: the greeting gave the patterns "Marcus"; the model then found
+    // "Marcus Lindqvist". Treating that as already covered leaked the surname.
+    const doc = 'To: Marcus Lindqvist\n\nHi Marcus,\nplease pay by Friday.\n\nRegards, Mr. Lindqvist';
+    const base = addDetections(emptyVault(), detectPatterns(doc));
+    const marcus = base.entities.find((e) => e.value === 'Marcus')!;
+    expect(marcus).toBeDefined();
+    const merged = addDetections(base, [
+      { text: 'Marcus Lindqvist', type: 'PERSON', source: 'on_device' },
+      { text: 'Mr. Marcus Lindqvist', type: 'PERSON', source: 'on_device' },
+    ]);
+    const masked = maskText(doc, merged);
+    expect(masked).not.toMatch(/Marcus|Lindqvist/);
+    // Same person, same placeholder as before the model ran.
+    expect(merged.entities.filter((e) => e.type === 'PERSON').length).toBe(base.entities.filter((e) => e.type === 'PERSON').length);
+    expect(merged.entities.find((e) => e.id === marcus.id)?.value).toBe('Marcus Lindqvist');
+    expect(findLeaks(masked, merged)).toEqual([]);
+  });
 });
 
 describe('sample documents', () => {

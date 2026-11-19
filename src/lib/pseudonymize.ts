@@ -23,6 +23,16 @@ const GENERIC = new Set(
 const normalize = (s: string) => s.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** "Mr. Daniel Okafor" from a model is the same person as "Daniel Okafor". */
+const TITLE_PREFIX = /^(?:mr|mrs|ms|miss|mx|dr|prof|sir|madam)\.?\s+/i;
+
+/** Types the pattern shield finds exactly; a model's wider span around one of these is redundant. */
+const STRUCTURED = new Set<EntityType>(['EMAIL', 'PHONE', 'URL', 'IBAN', 'CARD', 'ACCOUNT', 'MONEY', 'ID']);
+
+/** True if `phrase` occurs in `text` on word boundaries (both already normalized). */
+const containsPhrase = (text: string, phrase: string) =>
+  phrase.length > 0 && new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRe(phrase)}(?![\\p{L}\\p{N}_])`, 'u').test(text);
+
 function isMaskable(value: string, d: Detection): boolean {
   if (value.length < 2 || value.length > 120) return false;
   if (!/[\p{L}\p{N}]/u.test(value)) return false;
@@ -51,9 +61,42 @@ export function addDetections(state: VaultState, detections: Detection[]): Vault
     for (const a of e.aliases) known.add(normalize(a));
   }
   for (const d of detections) {
-    const value = d.text.trim().replace(/\s+/g, ' ');
+    const fromModel = d.source !== 'pattern' && d.source !== 'manual';
+    let value = d.text.trim().replace(/\s+/g, ' ');
+    // Models often copy the sentence's punctuation ("Harbor Studio Ltd."), which would
+    // otherwise give one company two placeholders.
+    if (fromModel) value = value.replace(/[.,;:]+$/, '');
+    if (fromModel && d.type === 'PERSON') value = value.replace(TITLE_PREFIX, '');
     const key = normalize(value);
     if (!isMaskable(value, d) || known.has(key)) continue;
+    if (fromModel) {
+      // A label around an exact identifier ("IBAN GB29 ...", "contract no. MO-17") adds
+      // nothing: the identifier is already masked, and the label helps the answer.
+      if (entities.some((e) => STRUCTURED.has(e.type) && containsPhrase(key, normalize(e.value)))) continue;
+      // A fuller form of a known name ("Marcus Lindqvist" when only "Marcus" was known) is
+      // MORE sensitive, never redundant: the entity grows to the full name and keeps its
+      // placeholder, and the short form lives on as an alias.
+      const shorter = entities.findIndex((e) => e.type === d.type && containsPhrase(key, normalize(e.value)));
+      if (shorter >= 0) {
+        const e = entities[shorter];
+        const parts = d.type === 'PERSON' ? nameAliases(value).filter((a) => !known.has(normalize(a))) : [];
+        const aliases = [...new Set([...e.aliases, e.value, ...parts])];
+        entities[shorter] = { ...e, value, aliases };
+        known.add(key);
+        for (const a of aliases) known.add(normalize(a));
+        continue;
+      }
+      // A shorter form of a known name ("Meridian Outfitters" for "Meridian Outfitters Inc")
+      // becomes an alias, so both spellings share one placeholder.
+      const longer = entities.findIndex((e) => e.type === d.type && containsPhrase(normalize(e.value), key));
+      if (longer >= 0) {
+        if (value.length >= 3) {
+          entities[longer] = { ...entities[longer], aliases: [...entities[longer].aliases, value] };
+          known.add(key);
+        }
+        continue;
+      }
+    }
     const n = (counters[d.type] ?? 0) + 1;
     counters[d.type] = n;
     const aliases = d.type === 'PERSON' ? nameAliases(value).filter((a) => !known.has(normalize(a))) : [];
@@ -137,12 +180,26 @@ const PLACEHOLDER_RE = new RegExp(`\\[\\s*((?:${ENTITY_TYPES.join('|')})_\\d+)\\
  * show either the real value (restored locally) or what the model actually wrote.
  * Tolerates models that drop the brackets.
  */
-export function rehydrate(answer: string, state: VaultState): Segment[] {
+export function rehydrate(answer: string, state: VaultState, keepUnknown = false): Segment[] {
   const byId = new Map(state.entities.map((e) => [e.id, e]));
   const out: Segment[] = [];
   let cursor = 0;
   for (const m of answer.matchAll(PLACEHOLDER_RE)) {
-    const entity = byId.get(m[1] ?? m[2]);
+    const id = m[1] ?? m[2];
+    let entity = byId.get(id);
+    if (!entity && keepUnknown) {
+      // No local value for this placeholder (the vault lives on another device): keep it as a bar.
+      entity = {
+        id,
+        type: id.slice(0, id.lastIndexOf('_')) as EntityType,
+        value: '[' + id + ']',
+        aliases: [],
+        source: 'pattern',
+        enabled: true,
+        ghost: true,
+      };
+      byId.set(id, entity);
+    }
     if (!entity) continue;
     if (m.index > cursor) out.push({ text: answer.slice(cursor, m.index) });
     out.push({ text: m[0], entity });

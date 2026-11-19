@@ -25,6 +25,8 @@ interface Rule {
   validate?: (value: string) => boolean;
   /** Strip trailing sentence punctuation from the match. */
   trimTail?: boolean;
+  /** Drop leading words that only start the sentence ("Between Acme Inc" -> "Acme Inc"). */
+  trimHead?: Set<string>;
 }
 
 const CURRENCY = 'USD|EUR|GBP|IDR|SGD|AUD|CAD|JPY|CHF|MYR|INR';
@@ -33,7 +35,11 @@ const ORG_SUFFIX =
   'Inc|LLC|L\\.L\\.C|Ltd|Limited|GmbH|Corp|Corporation|PLC|LLP|Pty|AG|B\\.V|BV|S\\.A|Sdn Bhd|Tbk|Co';
 const ORG_KIND =
   'Bank|Group|Holdings|Partners|University|Hospital|Clinic|Insurance|Finance|Capital|Ventures|Foundation|Associates|Logistics|Properties';
-const NOT_AN_ORG_START = new Set(['the', 'a', 'an', 'our', 'your', 'my', 'this', 'that', 'their', 'his', 'her']);
+const NOT_AN_ORG_START = new Set([
+  'the', 'a', 'an', 'our', 'your', 'my', 'this', 'that', 'their', 'his', 'her', 'its',
+  'between', 'with', 'from', 'to', 'by', 'for', 'at', 'in', 'on', 'of', 'and', 'or', 'but', 'as', 'if', 'when',
+  'dear', 'hi', 'hello', 'signed', 'payee', 'pay', 'contact', 'call', 'see', 'both', 'neither', 'either',
+]);
 const NOT_A_NAME = new Set(
   ['sir', 'madam', 'team', 'all', 'there', 'everyone', 'customer', 'client', 'colleagues', 'friend', 'support'],
 );
@@ -148,6 +154,7 @@ const RULES: Rule[] = [
       'dgu',
     ),
     group: 1,
+    trimHead: NOT_AN_ORG_START,
   },
   {
     // Organizations named by kind: "First Cascade Bank", "Northgate Auto Finance"
@@ -158,7 +165,7 @@ const RULES: Rule[] = [
       'dgu',
     ),
     group: 1,
-    validate: (v) => !NOT_AN_ORG_START.has(v.split(/\s+/)[0].toLowerCase()),
+    trimHead: NOT_AN_ORG_START,
   },
   {
     type: 'ORG',
@@ -179,6 +186,16 @@ function run(text: string, rule: Rule): Hit[] {
       if (!span) continue;
       [start] = span;
       value = text.slice(span[0], span[1]);
+    }
+    if (rule.trimHead) {
+      for (;;) {
+        const head = /^(\S+)\s+/u.exec(value);
+        if (!head || !rule.trimHead.has(head[1].toLowerCase())) break;
+        start += head[0].length;
+        value = value.slice(head[0].length);
+      }
+      // What is left must still be a name plus its suffix, not the suffix alone.
+      if (!/\s/u.test(value)) continue;
     }
     if (rule.trimTail) value = value.replace(/[.,;:!?]+$/u, '');
     value = value.replace(/\s+$/u, '');

@@ -2,9 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { detectPatterns } from '../lib/detectors';
 import { buildTaskPrompt } from '../lib/prompts';
-import { addDetections, emptyVault, findLeaks, maskText } from '../lib/pseudonymize';
+import { addDetections, emptyVault, findLeaks, maskSegments, maskText, rehydrate, shieldStats } from '../lib/pseudonymize';
 import { SAMPLES } from '../lib/samples';
 import { Rich } from './Rich';
+import { Workspace } from './Workspace';
 
 const text = 'Dear Tomas,\nLinden Analytics LLC is owed $4,740 on invoice no. INV-20931.';
 const vault = addDetections(emptyVault(), detectPatterns(text));
@@ -48,5 +49,40 @@ describe('outgoing payload', () => {
       expect(findLeaks(prompt, v)).toEqual([]);
       expect(prompt).toContain(`[${first.id}]`);
     }
+  });
+});
+
+describe('threads opened without the vault (another device)', () => {
+  const maskedDoc = 'Hi [PERSON_1],\nInvoice [ID_1] for [MONEY_1] is overdue. [PERSON_1] must pay.';
+
+  it('keeps placeholders as bars because the real values are not here', () => {
+    const html = renderToStaticMarkup(<Rich text="Ask [PERSON_1] about [MONEY_1]." vault={emptyVault()} real />);
+    expect(html).toContain('>PERSON 1</span>');
+    expect(html).toContain('>MONEY 1</span>');
+    expect(html).not.toContain('class="restored"');
+  });
+
+  it('shows the blindfolded copy with bars and correct counts', () => {
+    const segments = rehydrate(maskedDoc, emptyVault(), true);
+    expect(maskSegments(segments)).toBe(maskedDoc);
+    const stats = shieldStats(segments);
+    expect(stats.protectedValues).toBe(3);
+    expect(stats.protectedOccurrences).toBe(4);
+    const html = renderToStaticMarkup(
+      <Workspace
+        segments={segments}
+        stats={stats}
+        scan={{ state: 'idle' }}
+        foreign
+        canRescan={false}
+        onRescan={() => {}}
+        onToggleEntity={() => {}}
+        onToggleType={() => {}}
+        onMaskSelection={() => {}}
+      />,
+    );
+    expect(html).toContain('created on another device');
+    expect(html.match(/class="bar"/g)?.length).toBe(4);
+    expect(html).toContain('<strong>3</strong>');
   });
 });

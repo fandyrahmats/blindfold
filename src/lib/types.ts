@@ -35,6 +35,8 @@ export interface Entity {
   source: DetectionSource;
   /** When false the value was detected but the user chose to let it through. */
   enabled: boolean;
+  /** A placeholder whose real value is not in this browser's vault. */
+  ghost?: boolean;
 }
 
 export interface VaultState {

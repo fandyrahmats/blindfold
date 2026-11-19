@@ -14,9 +14,9 @@ export function Bar({ entity }: { entity: Entity }) {
 }
 
 function withEntities(text: string, vault: VaultState, real: boolean, key: string): ReactNode[] {
-  return rehydrate(text, vault).map((seg, i) => {
+  return rehydrate(text, vault, true).map((seg, i) => {
     if (!seg.entity) return seg.text;
-    return real ? (
+    return real && !seg.entity.ghost ? (
       <span className="restored" key={`${key}-${i}`} title={`${barLabel(seg.entity)} · restored on this device`}>
         {seg.entity.value}
       </span>
